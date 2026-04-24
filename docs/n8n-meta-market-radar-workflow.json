@@ -1,0 +1,482 @@
+{
+  "name": "Meta 廣告概念生成引擎",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "analyze-market",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "Webhook_AnalyzeMarket",
+      "name": "Webhook - Analyze Market",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1280,
+        180
+      ],
+      "webhookId": "__FILL_WEBHOOK_ID__"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.type }}",
+                    "rightValue": "competitor",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.type }}",
+                    "rightValue": "concept",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "Switch_ByType",
+      "name": "Switch - Task Type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -1040,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body ?? {};\nconst urls = Array.isArray(body.urls) ? body.urls.filter((url) => typeof url === 'string' && url.trim() !== '') : [];\n\nif (!body.productName || urls.length === 0) {\n  throw new Error('competitor 流程需要 productName 與至少一個 urls。');\n}\n\nreturn urls.map((url, index) => ({\n  json: {\n    workflowType: 'competitor',\n    productName: body.productName,\n    market: body.market ?? 'TW',\n    originalUrl: url,\n    scrapeIndex: index + 1,\n    firecrawlPayload: {\n      url,\n      formats: ['markdown']\n    }\n  }\n}));"
+      },
+      "id": "Code_PrepareCompetitorUrls",
+      "name": "Code - Prepare Competitor URLs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -800,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.firecrawl.dev/v1/scrape",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer __FIRECRAWL_API_KEY__"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.firecrawlPayload }}",
+        "options": {}
+      },
+      "id": "HTTP_FirecrawlCompetitor",
+      "name": "HTTP - Firecrawl Scrape (Competitor)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -560,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst first = items[0]?.json ?? {};\nconst sections = items.map((item, index) => {\n  const payload = item.json;\n  const sourceUrl = payload.originalUrl ?? payload.firecrawlPayload?.url ?? `來源 ${index + 1}`;\n  const markdown = payload.data?.markdown ?? payload.markdown ?? payload.content ?? '資料不足';\n  return `來源 ${index + 1}\\nURL: ${sourceUrl}\\n\\n${markdown}`;\n});\n\nconst scrapedData = sections.join('\\n\\n-----\\n\\n');\nconst prompt = `你現在是一位頂尖的 Meta 廣告策略顧問與市場分析師。\\n請根據以下 <scraped_data> 內的競品網頁文字，產出可直接給商務端閱讀的專業分析。\\n\\n任務要求：\\n1. 提煉競品核心賣點：總結這幾個競品主打的最大優勢。\\n2. 找出市場痛點：根據頁面內容，推斷消費者未被滿足的渴望、顧慮或抱怨。\\n3. 多樣化概念建議：針對我的產品提出 5 個完全不同的廣告切入概念，每個概念都必須包含：概念名稱、目標客群、切入痛點、文案方向。\\n4. 若資料品質不足，不能只停在「資料不足」；必須額外輸出「建議下一步」，具體告訴使用者如何補件，讓系統下次能拿到可分析資料。\\n\\n補充產品資訊：\\n我的產品名稱：${first.productName ?? '未提供'}\\n目標市場：${first.market ?? '未提供'}\\n\\n資料不足時的處理規則：\\n- 若 <scraped_data> 主要是安全驗證頁、登入頁、阻擋頁、空白頁、導轉頁，請明確指出目前擷取內容不足以支持完整判斷。\\n- 仍然要盡量從可讀內容提煉有限資訊，不能直接停止。\\n- 必須提供至少 3 條具體補件建議，例如：提供可直接開啟的產品頁、銷售頁、關於頁、FAQ 頁，貼上更多競品網址，補充產品文字介紹，上傳競品頁面截圖，或增加圖片上傳分析功能來解析廣告素材與落地頁畫面。\\n\\n輸出格式要求：\\n- 使用繁體中文。\\n- 請輸出純文字格式，不要使用 Markdown 符號。\\n- 禁止使用 #、##、###、*、**、\\`\\`\\` 這類符號。\\n- 以清楚的段落標題呈現，例如：競品核心賣點、市場痛點、廣告概念建議、建議下一步。\\n\\n防幻覺機制：\\n- 嚴格僅使用 <scraped_data> 內的資訊進行分析。\\n- 絕不可捏造未提及的數據、功能、客戶案例或市佔率。\\n- 若資料不足，只能做有限推測，並清楚標示推測基礎。\\n\\n<scraped_data>\\n${scrapedData}\\n</scraped_data>`;\n\nreturn [\n  {\n    json: {\n      workflowType: 'competitor',\n      prompt,\n      scrapedData,\n      productName: first.productName ?? '',\n      market: first.market ?? ''\n    }\n  }\n];"
+      },
+      "id": "Code_BuildCompetitorPrompt",
+      "name": "Code - Build Gemini Prompt (Competitor)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -320,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://google.serper.dev/search",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-KEY",
+              "value": "__SERPER_API_KEY__"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { q: $json.body.conceptDesc, gl: ($json.body.market ?? 'TW').toLowerCase(), hl: 'zh-tw', num: 3 } }}",
+        "options": {}
+      },
+      "id": "HTTP_SerperSearch",
+      "name": "HTTP - Serper Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -800,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $('Webhook - Analyze Market').first().json.body ?? {};\nconst organic = Array.isArray($json.organic) ? $json.organic : [];\nconst links = organic\n  .map((item) => item.link)\n  .filter((link) => typeof link === 'string' && link.trim() !== '')\n  .slice(0, 3);\n\nif (links.length === 0) {\n  throw new Error('Serper 沒有回傳可供 Firecrawl 抓取的連結。');\n}\n\nreturn links.map((url, index) => ({\n  json: {\n    workflowType: 'concept',\n    conceptDesc: body.conceptDesc ?? '',\n    market: body.market ?? 'TW',\n    searchUrl: url,\n    searchIndex: index + 1,\n    firecrawlPayload: {\n      url,\n      formats: ['markdown']\n    }\n  }\n}));"
+      },
+      "id": "Code_PrepareConceptUrls",
+      "name": "Code - Prepare Search URLs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -560,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.firecrawl.dev/v1/scrape",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer __FIRECRAWL_API_KEY__"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.firecrawlPayload }}",
+        "options": {}
+      },
+      "id": "HTTP_FirecrawlConcept",
+      "name": "HTTP - Firecrawl Scrape (Concept)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -320,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst first = items[0]?.json ?? {};\nconst sections = items.map((item, index) => {\n  const payload = item.json;\n  const sourceUrl = payload.searchUrl ?? payload.firecrawlPayload?.url ?? `來源 ${index + 1}`;\n  const markdown = payload.data?.markdown ?? payload.markdown ?? payload.content ?? '資料不足';\n  return `搜尋來源 ${index + 1}\\nURL: ${sourceUrl}\\n\\n${markdown}`;\n});\n\nconst scrapedData = sections.join('\\n\\n-----\\n\\n');\nconst prompt = `你現在是一位具備頂尖商業嗅覺的 SaaS 產品開發顧問。\\n請根據以下 <scraped_data> 的市場搜尋結果內文，針對我提出的產品概念進行市場驗證與發想。\\n\\n我的產品概念：${first.conceptDesc ?? '未提供'}\\n目標市場區域：${first.market ?? '未提供'}\\n\\n任務要求：\\n1. 市場現況總結：目前市場上解決類似問題的方案有哪些，競爭狀態如何。\\n2. 差異化突圍策略：我的概念在哪裡具有有意義的差異化。\\n3. 廣告概念矩陣：請為我的產品生成 9 個多樣化廣告概念，必須涵蓋冷受眾、溫受眾、熱受眾三個階段，每階段 3 個概念。\\n4. 若資料品質不足，不能只停在資料不足，必須提出具體補件與下一步建議。\\n\\n資料不足時的處理規則：\\n- 若搜尋結果主要是安全驗證頁、無法讀取頁、極少內容頁，請明確指出目前資料不足以支持完整市場判斷。\\n- 仍要整理目前可讀到的有限資訊，不能直接停止。\\n- 必須提供至少 3 條具體補件建議，例如：補充更完整的產品概念描述、指定更明確的市場關鍵字、提供同類競品網址、貼上品牌官網與產品頁、上傳市場頁面截圖或廣告素材圖片，或增加圖片上傳分析功能。\\n\\n輸出格式要求：\\n- 使用繁體中文。\\n- 請輸出純文字格式，不要使用 Markdown 符號。\\n- 禁止使用 #、##、###、*、**、\\`\\`\\` 這類符號。\\n- 以清楚的段落標題呈現，例如：市場現況總結、差異化突圍策略、廣告概念矩陣、建議下一步。\\n\\n防幻覺機制：\\n- 結論必須基於 <scraped_data> 的客觀內容，不得自行想像地區市佔率或不存在的品牌資料。\\n- 若資料不足，只能做有限推測，並清楚交代推測基礎。\\n\\n<scraped_data>\\n${scrapedData}\\n</scraped_data>`;\n\nreturn [\n  {\n    json: {\n      workflowType: 'concept',\n      prompt,\n      scrapedData,\n      conceptDesc: first.conceptDesc ?? '',\n      market: first.market ?? ''\n    }\n  }\n];"
+      },
+      "id": "Code_BuildConceptPrompt",
+      "name": "Code - Build Gemini Prompt (Concept)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -80,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://generativelanguage.googleapis.com/v1beta/models/' + ($json.workflowType === 'competitor' ? '__GEMINI_MODEL__' : '__GEMINI_MODEL__') + ':generateContent?key=__GEMINI_API_KEY__' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { contents: [ { role: 'user', parts: [ { text: $json.prompt } ] } ], generationConfig: { temperature: 0.7, topP: 0.9, maxOutputTokens: 4096 } } }}",
+        "options": {}
+      },
+      "id": "HTTP_GeminiCompetitor",
+      "name": "HTTP - Gemini Generate (Competitor)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        160,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://generativelanguage.googleapis.com/v1beta/models/' + '__GEMINI_MODEL__' + ':generateContent?key=__GEMINI_API_KEY__' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { contents: [ { role: 'user', parts: [ { text: $json.prompt } ] } ], generationConfig: { temperature: 0.7, topP: 0.9, maxOutputTokens: 4096 } } }}",
+        "options": {}
+      },
+      "id": "HTTP_GeminiConcept",
+      "name": "HTTP - Gemini Generate (Concept)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        160,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const candidate = $json.candidates?.[0];\nconst parts = candidate?.content?.parts ?? [];\nconst markdown = parts.map((part) => part.text).filter(Boolean).join('\\n\\n');\n\nreturn [\n  {\n    json: {\n      ok: true,\n      type: 'competitor',\n      result: markdown || 'Gemini 未回傳內容。',\n      raw: $json\n    }\n  }\n];"
+      },
+      "id": "Code_FormatCompetitorResponse",
+      "name": "Code - Format Response (Competitor)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const candidate = $json.candidates?.[0];\nconst parts = candidate?.content?.parts ?? [];\nconst markdown = parts.map((part) => part.text).filter(Boolean).join('\\n\\n');\n\nreturn [\n  {\n    json: {\n      ok: true,\n      type: 'concept',\n      result: markdown || 'Gemini 未回傳內容。',\n      raw: $json\n    }\n  }\n];"
+      },
+      "id": "Code_FormatConceptResponse",
+      "name": "Code - Format Response (Concept)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "RespondToWebhook_Final",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        680,
+        180
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook - Analyze Market": {
+      "main": [
+        [
+          {
+            "node": "Switch - Task Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch - Task Type": {
+      "main": [
+        [
+          {
+            "node": "Code - Prepare Competitor URLs",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP - Serper Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Prepare Competitor URLs": {
+      "main": [
+        [
+          {
+            "node": "HTTP - Firecrawl Scrape (Competitor)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP - Firecrawl Scrape (Competitor)": {
+      "main": [
+        [
+          {
+            "node": "Code - Build Gemini Prompt (Competitor)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Build Gemini Prompt (Competitor)": {
+      "main": [
+        [
+          {
+            "node": "HTTP - Gemini Generate (Competitor)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP - Gemini Generate (Competitor)": {
+      "main": [
+        [
+          {
+            "node": "Code - Format Response (Competitor)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Format Response (Competitor)": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP - Serper Search": {
+      "main": [
+        [
+          {
+            "node": "Code - Prepare Search URLs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Prepare Search URLs": {
+      "main": [
+        [
+          {
+            "node": "HTTP - Firecrawl Scrape (Concept)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP - Firecrawl Scrape (Concept)": {
+      "main": [
+        [
+          {
+            "node": "Code - Build Gemini Prompt (Concept)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Build Gemini Prompt (Concept)": {
+      "main": [
+        [
+          {
+            "node": "HTTP - Gemini Generate (Concept)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP - Gemini Generate (Concept)": {
+      "main": [
+        [
+          {
+            "node": "Code - Format Response (Concept)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Format Response (Concept)": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "a7f0f865-5b9d-4f14-94f6-7c72d0e85111",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "id": "__N8N_WORKFLOW_ID__",
+  "tags": []
+}

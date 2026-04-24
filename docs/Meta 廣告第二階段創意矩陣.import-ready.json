@@ -1,0 +1,173 @@
+{
+  "name": "Meta 廣告第二階段創意矩陣",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "generate-concepts",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "0d430997-5c2f-4c23-a959-fb9a97dc3f16",
+      "name": "Webhook - Generate Concepts",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -720,
+        240
+      ],
+      "webhookId": "__FILL_WEBHOOK_ID__"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body ?? {};\nconst marketInsights = body.marketInsights;\nconst sourceType = body.sourceType ?? 'unknown';\nconst executionContext = body.executionContext ?? {};\nconst projectName = executionContext.projectName?.trim() || body.marketInsights?.meta?.projectName || '未命名專案';\n\nif (!marketInsights) {\n  throw new Error('第二階段 workflow 需要 body.marketInsights。');\n}\n\nconst insightText = typeof marketInsights === 'string'\n  ? marketInsights\n  : JSON.stringify(marketInsights, null, 2);\n\nconst stageConfigs = [\n  { awarenessStage: 'Cold', stageTitle: '陌生客群 - 問題認知', conceptCount: 4, stageGoal: '讓受眾先意識到問題、感受到需求，願意停下來理解這個新切角。', conceptIdPrefix: 'C' },\n  { awarenessStage: 'Warm', stageTitle: '溫受眾 - 方案比較', conceptCount: 4, stageGoal: '讓已經對問題有感的人理解你的方案為什麼值得考慮，並降低比較與猶豫。', conceptIdPrefix: 'W' },\n  { awarenessStage: 'Hot', stageTitle: '熱受眾 - 臨門一腳', conceptCount: 4, stageGoal: '讓已經接近決策的人更願意採取行動，強化信任、急迫感與轉換理由。', conceptIdPrefix: 'H' }\n];\n\nreturn stageConfigs.map((config, index) => {\n  const prompt = `你現在是一位頂尖的 Meta 廣告創意總監，深諳最新 Andromeda 演算法「真多樣化（Meaningful differences）」的核心邏輯。\\n\\n以下 <market_insights> 標籤內，是我們在第一階段抓取並分析出的市場痛點、競品弱點、受眾語言與潛在切角。\\n請只針對 ${config.awarenessStage} 階段生成 ${config.conceptCount} 個完全不同、具備有意義差異的廣告 Concepts。\\n\\n補充上下文：\\n- 專案名稱：${projectName}\\n- 洞察來源工作流：${sourceType}\\n- 執行階段：第二階段創意矩陣\\n- 本次點數成本：${executionContext.pointCost ?? 1} 點\\n- 認知階段：${config.awarenessStage}（${config.stageTitle}）\\n- 此階段目標：${config.stageGoal}\\n- 不可捏造不存在的產品功能、數據、客戶見證或市佔資訊。\\n- 如果資料不足，請縮短每個欄位字數，但仍要完整列出 ${config.conceptCount} 個 Concept。\\n- 禁止撰寫長篇前言，直接進入概念列表。\\n\\n【矩陣要求】\\n1. 只生成 ${config.awarenessStage} 階段內容。\\n2. 共 ${config.conceptCount} 個 Concepts。\\n3. 每個 Concept 必須針對不同的次文化人群、心理渴望、使用情境或購買障礙。\\n4. 每個 Concept 的核心切入角度必須真正不同，禁止只是同一個概念換說法。\\n5. 每個欄位控制在 1 到 2 句內，保持精煉但可執行。\\n6. 嚴格遵守下方模板，所有 Concept 都必須使用完全相同的欄位名稱與順序，不可自行改名，不可省略欄位，不可使用 'H1:'、'W1:' 這類簡寫格式。\\n\\n【輸出格式】\\n請使用 Markdown 格式輸出。\\n第一行固定輸出：## ${config.awarenessStage} - ${config.stageTitle}\\n之後每個 Concept 都必須嚴格使用以下模板：\\n\\n### Concept ${config.conceptIdPrefix}1 - {名稱}\\n- Concept ID 與名稱: ${config.conceptIdPrefix}1 - {名稱}\\n- 認知階段: ${config.awarenessStage}\\n- 精準子人群與痛點: {內容}\\n- 核心切入點 (Big Idea): {內容}\\n- 建議廣告載體: {內容}\\n- 視覺與文案指引: {內容}\\n\\n### Concept ${config.conceptIdPrefix}2 - {名稱}\\n- Concept ID 與名稱: ${config.conceptIdPrefix}2 - {名稱}\\n- 認知階段: ${config.awarenessStage}\\n- 精準子人群與痛點: {內容}\\n- 核心切入點 (Big Idea): {內容}\\n- 建議廣告載體: {內容}\\n- 視覺與文案指引: {內容}\\n\\n依此類推直到 ${config.conceptIdPrefix}${config.conceptCount}。\\n\\n【禁止事項】\\n- 不要輸出前言、結語、補充說明\\n- 不要使用粗體星號包欄位名稱\\n- 不要把欄位改成『Concept ID:』或『Concept ID 與名稱：』以外的寫法\\n- 不要把 Warm / Hot 階段改成段落敘事格式\\n\\n<market_insights>\\n${insightText}\\n</market_insights>`;\n\n  return {\n    json: {\n      workflowType: 'concept-matrix-batch',\n      projectName,\n      sourceType,\n      executionContext: { ...executionContext, stage: 'stage_two', pointCost: executionContext.pointCost ?? 1 },\n      marketInsights,\n      insightText,\n      awarenessStage: config.awarenessStage,\n      stageTitle: config.stageTitle,\n      conceptCount: config.conceptCount,\n      conceptIdPrefix: config.conceptIdPrefix,\n      batchIndex: index,\n      prompt\n    }\n  };\n});"
+      },
+      "id": "8deebf05-d0d2-42b9-8e6d-178f68f09537",
+      "name": "Code - Prepare Stage Prompts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -480,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/__GEMINI_MODEL__:generateContent?key=__GEMINI_API_KEY__",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { contents: [ { role: 'user', parts: [ { text: $json.prompt } ] } ], generationConfig: { temperature: 0.8, topP: 0.95, maxOutputTokens: 4096 } } }}",
+        "options": {}
+      },
+      "id": "bf4ebd42-eef6-42eb-8d8f-9ce6bcf9b2c5",
+      "name": "HTTP - Gemini Generate Concepts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -240,
+        240
+      ],
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst originalItems = $('Code - Prepare Stage Prompts').all();\n\nreturn items.map((item, index) => {\n  const original = originalItems[index]?.json ?? {};\n  const text = item.json.candidates?.[0]?.content?.parts?.map((part) => part.text).filter(Boolean).join('\\n') ?? '未回傳內容。';\n\n  return {\n    json: {\n      ...original,\n      batchResult: text,\n      raw: item.json\n    }\n  };\n});"
+      },
+      "id": "4d210cfb-3343-4f0d-8838-42b104f44aa3",
+      "name": "Code - Extract Batch Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all().sort((a, b) => (a.json.batchIndex ?? 0) - (b.json.batchIndex ?? 0));\n\nif (items.length === 0) {\n  throw new Error('沒有可合併的第二階段批次結果。');\n}\n\nconst normalizeBatchResult = (text, stageCode) => {\n  let normalized = (text ?? '').trim();\n  if (!normalized) return normalized;\n\n  normalized = normalized.replace(/^\\*\\*資料限制說明：\\*\\*[\\s\\S]*?(?=^##\\s|^###\\s|^Concept|^### Concept|$)/m, '').trim();\n  normalized = normalized.replace(/^#{1,6}\\s*(Concept\\s+)?([CWH]\\d+)\\s*[:：-]\\s*/gm, '### Concept $2 - ');\n  normalized = normalized.replace(/^-\\s*\\*\\*Concept ID 與名稱\\*\\*\\s*[:：]\\s*/gm, '- Concept ID 與名稱: ');\n  normalized = normalized.replace(/^-\\s*\\*\\*認知階段\\*\\*\\s*[:：]\\s*/gm, '- 認知階段: ');\n  normalized = normalized.replace(/^-\\s*\\*\\*精準子人群與痛點\\*\\*\\s*[:：]\\s*/gm, '- 精準子人群與痛點: ');\n  normalized = normalized.replace(/^-\\s*\\*\\*核心切入點 \\(Big Idea\\)\\*\\*\\s*[:：]\\s*/gm, '- 核心切入點 (Big Idea): ');\n  normalized = normalized.replace(/^-\\s*\\*\\*建議廣告載體\\*\\*\\s*[:：]\\s*/gm, '- 建議廣告載體: ');\n  normalized = normalized.replace(/^-\\s*\\*\\*視覺與文案指引\\*\\*\\s*[:：]\\s*/gm, '- 視覺與文案指引: ');\n  normalized = normalized.replace(/^Concept ID\\s*[:：]\\s*/gm, '- Concept ID 與名稱: ');\n  normalized = normalized.replace(/^Concept ID 與名稱\\s*[:：]\\s*/gm, '- Concept ID 與名稱: ');\n  normalized = normalized.replace(/^認知階段\\s*[:：]\\s*/gm, '- 認知階段: ');\n  normalized = normalized.replace(/^精準子人群與痛點\\s*[:：]\\s*/gm, '- 精準子人群與痛點: ');\n  normalized = normalized.replace(/^核心切入點 \\(Big Idea\\)\\s*[:：]\\s*/gm, '- 核心切入點 (Big Idea): ');\n  normalized = normalized.replace(/^建議廣告載體\\s*[:：]\\s*/gm, '- 建議廣告載體: ');\n  normalized = normalized.replace(/^視覺與文案指引\\s*[:：]\\s*/gm, '- 視覺與文案指引: ');\n  normalized = normalized.replace(/^(C|W|H)(\\d+)\\s*[:：-]\\s*/gm, '### Concept $1$2 - ');\n\n  const stageTitleMap = {\n    Cold: '陌生客群 - 問題認知',\n    Warm: '溫受眾 - 方案比較',\n    Hot: '熱受眾 - 臨門一腳'\n  };\n\n  if (!normalized.startsWith(`## ${stageCode} -`)) {\n    normalized = `## ${stageCode} - ${stageTitleMap[stageCode] ?? ''}\\n\\n${normalized}`.trim();\n  }\n\n  return normalized;\n};\n\nconst mergedSections = items.map((item) => normalizeBatchResult(item.json.batchResult, item.json.awarenessStage)).filter(Boolean);\nconst first = items[0].json;\nconst sourceType = first.sourceType ?? 'unknown';\nconst projectName = first.projectName ?? '未命名專案';\nconst pointCost = first.executionContext?.pointCost ?? 1;\nconst finalResult = `# Meta 廣告創意 Concepts (共 12 個)\\n\\n${mergedSections.join('\\n\\n---\\n\\n')}\\n\\n## 最值得優先測試的前 3 個 Concept\\n- 請先檢查上方 Cold / Warm / Hot 三組概念，優先挑選最貼近你目前投放目標與素材能力的 3 個方向進行測試。`;\n\nreturn [{ json: { ok: true, type: 'concept-matrix', result: finalResult, meta: { projectName, sourceType, stage: 'stage_two', pointCost, generatedAt: new Date().toISOString(), batchCount: items.length }, batches: items.map((item) => ({ awarenessStage: item.json.awarenessStage, stageTitle: item.json.stageTitle, batchResult: normalizeBatchResult(item.json.batchResult, item.json.awarenessStage) })) } }];"
+      },
+      "id": "06dcbcc8-d9ad-4d71-a3f2-59ba4e723020",
+      "name": "Code - Merge Batch Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "cdd2d9ea-3ef0-467f-a287-07f69f7dc71d",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        480,
+        240
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook - Generate Concepts": {
+      "main": [
+        [
+          {
+            "node": "Code - Prepare Stage Prompts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Prepare Stage Prompts": {
+      "main": [
+        [
+          {
+            "node": "HTTP - Gemini Generate Concepts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP - Gemini Generate Concepts": {
+      "main": [
+        [
+          {
+            "node": "Code - Extract Batch Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Extract Batch Results": {
+      "main": [
+        [
+          {
+            "node": "Code - Merge Batch Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Merge Batch Results": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "7cf26fb0-9329-4cab-bc4f-c92f193caa43",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "id": "MetaAdCreativeMatrixWorkflow",
+  "tags": []
+}
