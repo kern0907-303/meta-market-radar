@@ -1,0 +1,7 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  VITE_STAGE_ONE_WEBHOOK_URL = "https://erick303.app.n8n.cloud/webhook/analyze-market"
+  VITE_STAGE_TWO_WEBHOOK_URL = "https://erick303.app.n8n.cloud/webhook/generate-concepts"
