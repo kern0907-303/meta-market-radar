@@ -121,13 +121,34 @@ const activePreviewMeta = computed(
   () => previewTabs.find((tab) => tab.key === activePreview.value) ?? previewTabs[0]
 )
 
-const resultMarkdown = computed(() => {
-  if (!resultData.value) return ''
-  if (typeof resultData.value === 'string') return resultData.value
-  if (typeof resultData.value.result === 'string') return resultData.value.result
-  if (typeof resultData.value.error === 'string') return resultData.value.error
-  return JSON.stringify(resultData.value, null, 2)
-})
+const extractGeminiText = (payload) => {
+  const candidates = payload?.candidates ?? payload?.raw?.candidates
+  const parts = candidates?.[0]?.content?.parts
+  if (!Array.isArray(parts)) return ''
+
+  return parts
+    .map((part) => part?.text)
+    .filter((text) => typeof text === 'string' && text.trim() !== '')
+    .join('\n\n')
+}
+
+const responseToMarkdown = (payload) => {
+  if (!payload) return ''
+  if (typeof payload === 'string') return payload
+  if (typeof payload.error === 'string') return payload.error
+
+  const geminiText = extractGeminiText(payload)
+  const resultText = typeof payload.result === 'string' ? payload.result : ''
+  const resultIsFallback = resultText.trim() === '未回傳內容。' || resultText.trim() === 'Gemini 未回傳內容。'
+
+  if (resultText && !resultIsFallback) return resultText
+  if (geminiText) return geminiText
+  if (resultText) return resultText
+
+  return JSON.stringify(payload, null, 2)
+}
+
+const resultMarkdown = computed(() => responseToMarkdown(resultData.value))
 
 const hasResultError = computed(() => Boolean(resultData.value?.error))
 
@@ -141,11 +162,7 @@ const renderedResultHtml = computed(() => {
 
 const conceptMarkdown = computed(() => {
   if (conceptErrorMessage.value && !conceptData.value) return conceptErrorMessage.value
-  if (!conceptData.value) return ''
-  if (typeof conceptData.value === 'string') return conceptData.value
-  if (typeof conceptData.value.result === 'string') return conceptData.value.result
-  if (typeof conceptData.value.error === 'string') return conceptData.value.error
-  return JSON.stringify(conceptData.value, null, 2)
+  return responseToMarkdown(conceptData.value)
 })
 
 const hasConceptError = computed(() => Boolean(conceptErrorMessage.value || conceptData.value?.error))
